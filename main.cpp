@@ -3,6 +3,7 @@
 int main(int argc, char **argv) {
 
     AneuMeshLoader mesh = AneuMeshLoader();
+
     ///console start
     if (argc == 2) {
         std::ifstream inf(argv[1], std::ios::binary | std::ios::in);
@@ -27,7 +28,6 @@ int main(int argc, char **argv) {
         std::cout << i.ID << " ";
     }
     std::cout << "\n";
-
     ///method of find element by edge
     els = mesh.find_el_by_edge({9, 14});
     std::cout << "\n-------------\n";
@@ -89,6 +89,5 @@ int main(int argc, char **argv) {
         sch++;
         std::cout << "\n";
     }
-
     return 0;
 }

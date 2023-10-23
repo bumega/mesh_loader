@@ -9,16 +9,14 @@ void AneuMeshLoader::LoadMesh(std::ifstream &file_it) {
     double sch;
     for (size_t i = 0; i < kol; i++) {
         tmp.ID = i + 1;
-        tmp.flag = false;
-        //tmp.coord.clear();
+        tmp.is_vertex = false;
         for (size_t j = 0; j < dim; j++) {
             file_it >> sch;
-            //tmp.coord.push_back(sch);
-            tmp.coord[j] = sch;
+            tmp.coords[j] = sch;
         }
         node_c.push_back(tmp);
 
-        node_coord[std::make_tuple(tmp.coord[0], tmp.coord[1], tmp.coord[2])] = tmp.ID;
+        node_coords[std::make_tuple(tmp.coords[0], tmp.coords[1], tmp.coords[2])] = tmp.ID;
     }
     file_it >> kol >> dim;
     FiniteElement tm;
@@ -28,10 +26,9 @@ void AneuMeshLoader::LoadMesh(std::ifstream &file_it) {
         tm.nodes_id.clear();
         for (size_t j = 0; j < dim; j++) {
             file_it >> sch;
-            node_c[sch - 1].flag = true;
+            node_c[sch - 1].is_vertex = true;
             tm.nodes_id.push_back(sch);
         }
-        std::sort(tm.nodes_id.begin(), tm.nodes_id.end());
         tetra_c.push_back(tm);
     }
     file_it >> kol >> dim;
@@ -43,7 +40,6 @@ void AneuMeshLoader::LoadMesh(std::ifstream &file_it) {
             file_it >> sch;
             tm.nodes_id.push_back(sch);
         }
-        std::sort(tm.nodes_id.begin(), tm.nodes_id.end());
         triang_c.push_back(tm);
     }
 }
@@ -64,69 +60,65 @@ std::vector<FiniteElement> AneuMeshLoader::get_triang() const {
 }
 
 ///find finite elements by 3 nodes O(n)
-std::vector<FiniteElement> AneuMeshLoader::find_el_by_nodes(std::vector<size_t> &&nodes) const {
+std::vector<FiniteElement> AneuMeshLoader::find_el_by_nodes(std::array<size_t, 3> &&nodes) {
     std::vector<FiniteElement> ans;
-    auto it = std::find_if(tetra_c.begin(), tetra_c.end(), \
-        [nodes](const FiniteElement &f_el) -> bool {
-        return std::all_of(nodes.begin(), \
-            nodes.end(), [f_el](size_t chsl) -> bool {
-            return std::any_of(f_el.nodes_id.begin(), \
-                f_el.nodes_id.end(), [chsl](size_t nd) -> bool { return nd == chsl; });
-        });
+    auto correct_elements = tetra_c | std::ranges::views::filter([&nodes](const FiniteElement& f_el) -> bool {
+        return std::ranges::all_of(
+            nodes,
+            [&f_el](size_t chsl) -> bool {
+                return std::ranges::any_of(
+                    f_el.nodes_id,
+                    [&chsl](size_t nd) -> bool { return nd == chsl;}
+                );
+            }
+        );
     });
-    while (it != tetra_c.end()) {
-        ans.push_back(*it);
-        it = std::find_if(it + 1, tetra_c.end(), [nodes](const FiniteElement &f_el) -> bool \
- {
-            return std::all_of(nodes.begin(), nodes.end(), [f_el](size_t chsl) -> bool \
- {
-                return std::any_of(f_el.nodes_id.begin(), f_el.nodes_id.end(), [chsl](size_t nd) -> bool \
- { return nd == chsl; });
-            });
-        });
-    }
+    std::ranges::copy(correct_elements, std::back_inserter(ans));
     return ans;
 }
 
 ///find finite elements by edge(2 nodes) O(n)
 std::vector<FiniteElement> AneuMeshLoader::find_el_by_edge(const std::pair<size_t, size_t> &id_s) const {
     std::vector<FiniteElement> ans;
-    for (auto el: tetra_c) {
-        if (std::find(el.nodes_id.begin(), el.nodes_id.end(), id_s.first) != el.nodes_id.end() and \
-        std::find(el.nodes_id.begin(), el.nodes_id.end(), id_s.first) != el.nodes_id.end()) {
-            ans.push_back(el);
-        }
-    }
+    auto correct_elements = tetra_c | std::ranges::views::filter([&id_s](const FiniteElement& el) -> bool 
+        {return std::ranges::any_of(
+            el.nodes_id,
+            [&id_s](const size_t& id) 
+            {return id == id_s.first;}
+        ) 
+        and std::ranges::any_of(
+            el.nodes_id, 
+            [&id_s](const size_t& id) 
+            {return id == id_s.second;}
+        );}
+    );
+    std::ranges::copy(correct_elements, std::back_inserter(ans));
     return ans;
 }
 
 ///find finite elements by area O(n)
 std::vector<FiniteElement> AneuMeshLoader::find_el_by_area(size_t ar_id) const {
     std::vector<FiniteElement> ans;
-    for (const auto &el: tetra_c) {
-        if (el.area_ID == ar_id) {
-            ans.push_back(el);
-        }
-    }
+    auto correct_elements = tetra_c | std::ranges::views::filter(
+        [&ar_id](const FiniteElement& el) {return el.area_ID == ar_id;});
+    std::ranges::copy(correct_elements, std::back_inserter(ans));
     return ans;
 }
 
 ///find finite elements by surface O(n)
 std::vector<FiniteElement> AneuMeshLoader::find_el_by_surface(size_t id_c) const {
     std::vector<FiniteElement> ans;
-    for (const auto &el: triang_c) {
-        if (el.area_ID == id_c) {
-            ans.push_back(el);
-        }
-    }
+    auto correct_elements = triang_c | std::ranges::views::filter(
+        [&id_c](const FiniteElement& el) {return el.area_ID == id_c;});
+    std::ranges::copy(correct_elements, std::back_inserter(ans));
     return ans;
 }
 
 ///all possible pairs of vector elements
-std::vector<std::pair<size_t, size_t>> combinations(std::vector<size_t> nums) {
+std::vector<std::pair<size_t, size_t>> combinations(std::vector<size_t>& nums) {
     std::vector<std::pair<size_t, size_t>> ans;
-    for (auto f = nums.begin(); f != nums.end(); f++) {
-        for (auto s = f + 1; s != nums.end(); s++) {
+    for (auto f = nums.begin(); f != nums.end(); ++f) {
+        for (auto s = f + 1; s != nums.end(); ++s) {
             ans.emplace_back(*f, *s);
         }
     }
@@ -151,21 +143,21 @@ void AneuMeshLoader::insert_nodes() {
     for (auto &el: tetra_c) {
         auto comb = combinations(el.nodes_id);
         for (auto i: comb) {
-            auto fn = node_coord.find(
-                    std::make_tuple((node_c[i.first - 1].coord[0] + node_c[i.second - 1].coord[0]) / 2,
-                                    (node_c[i.first - 1].coord[1] + node_c[i.second - 1].coord[1]) / 2,
-                                    (node_c[i.first - 1].coord[2] + node_c[i.second - 1].coord[2]) / 2));
-            if (fn == node_coord.end()) {
+            auto fn = node_coords.find(
+                    std::make_tuple((node_c[i.first - 1].coords[0] + node_c[i.second - 1].coords[0]) / 2,
+                                    (node_c[i.first - 1].coords[1] + node_c[i.second - 1].coords[1]) / 2,
+                                    (node_c[i.first - 1].coords[2] + node_c[i.second - 1].coords[2]) / 2));
+            if (fn == node_coords.end()) {
                 Node n_nd;
                 n_nd.ID = node_c.size() + 1;
-                n_nd.flag = false;
-                n_nd.coord = {(node_c[i.first - 1].coord[0] + node_c[i.second - 1].coord[0]) / 2,
-                              (node_c[i.first - 1].coord[1] + node_c[i.second - 1].coord[1]) / 2,
-                              (node_c[i.first - 1].coord[2] + node_c[i.second - 1].coord[2]) / 2};
+                n_nd.is_vertex = false;
+                n_nd.coords = {(node_c[i.first - 1].coords[0] + node_c[i.second - 1].coords[0]) / 2,
+                              (node_c[i.first - 1].coords[1] + node_c[i.second - 1].coords[1]) / 2,
+                              (node_c[i.first - 1].coords[2] + node_c[i.second - 1].coords[2]) / 2};
                 node_c.push_back(n_nd);
-                node_coord[{(node_c[i.first - 1].coord[0] + node_c[i.second - 1].coord[0]) / 2,
-                            (node_c[i.first - 1].coord[1] + node_c[i.second - 1].coord[1]) / 2,
-                            (node_c[i.first - 1].coord[2] + node_c[i.second - 1].coord[2]) / 2}] = node_c.size();
+                node_coords[{(node_c[i.first - 1].coords[0] + node_c[i.second - 1].coords[0]) / 2,
+                            (node_c[i.first - 1].coords[1] + node_c[i.second - 1].coords[1]) / 2,
+                            (node_c[i.first - 1].coords[2] + node_c[i.second - 1].coords[2]) / 2}] = node_c.size();
                 el.nodes_id.push_back(node_c.size());
             } else {
                 el.nodes_id.push_back((fn->second));
@@ -175,21 +167,21 @@ void AneuMeshLoader::insert_nodes() {
     for (auto &el: triang_c) {
         auto comb = combinations(el.nodes_id);
         for (auto i: comb) {
-            auto fn = node_coord.find(
-                    std::make_tuple((node_c[i.first - 1].coord[0] + node_c[i.second - 1].coord[0]) / 2,
-                                    (node_c[i.first - 1].coord[1] + node_c[i.second - 1].coord[1]) / 2,
-                                    (node_c[i.first - 1].coord[2] + node_c[i.second - 1].coord[2]) / 2));
-            if (fn == node_coord.end()) {
+            auto fn = node_coords.find(
+                    std::make_tuple((node_c[i.first - 1].coords[0] + node_c[i.second - 1].coords[0]) / 2,
+                                    (node_c[i.first - 1].coords[1] + node_c[i.second - 1].coords[1]) / 2,
+                                    (node_c[i.first - 1].coords[2] + node_c[i.second - 1].coords[2]) / 2));
+            if (fn == node_coords.end()) {
                 Node n_nd;
                 n_nd.ID = node_c.size() + 1;
-                n_nd.flag = false;
-                n_nd.coord = {(node_c[i.first - 1].coord[0] + node_c[i.second - 1].coord[0]) / 2,
-                              (node_c[i.first - 1].coord[1] + node_c[i.second - 1].coord[1]) / 2,
-                              (node_c[i.first - 1].coord[2] + node_c[i.second - 1].coord[2]) / 2};
+                n_nd.is_vertex = false;
+                n_nd.coords = {(node_c[i.first - 1].coords[0] + node_c[i.second - 1].coords[0]) / 2,
+                              (node_c[i.first - 1].coords[1] + node_c[i.second - 1].coords[1]) / 2,
+                              (node_c[i.first - 1].coords[2] + node_c[i.second - 1].coords[2]) / 2};
                 node_c.push_back(n_nd);
-                node_coord[{(node_c[i.first - 1].coord[0] + node_c[i.second - 1].coord[0]) / 2,
-                            (node_c[i.first - 1].coord[1] + node_c[i.second - 1].coord[1]) / 2,
-                            (node_c[i.first - 1].coord[2] + node_c[i.second - 1].coord[2]) / 2}] = node_c.size();
+                node_coords[{(node_c[i.first - 1].coords[0] + node_c[i.second - 1].coords[0]) / 2,
+                            (node_c[i.first - 1].coords[1] + node_c[i.second - 1].coords[1]) / 2,
+                            (node_c[i.first - 1].coords[2] + node_c[i.second - 1].coords[2]) / 2}] = node_c.size();
                 el.nodes_id.push_back(node_c.size());
             } else {
                 el.nodes_id.push_back((fn->second));

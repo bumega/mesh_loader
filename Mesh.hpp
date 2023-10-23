@@ -27,7 +27,7 @@ public:
 
     std::vector<FiniteElement> get_triang() const;
 
-    std::vector<FiniteElement> find_el_by_nodes(std::vector<size_t> &&els) const;
+    std::vector<FiniteElement> find_el_by_nodes(std::array<size_t, 3> &&els);
 
     std::vector<FiniteElement> find_el_by_edge(const std::pair<size_t, size_t> &id_s) const;
 
@@ -45,12 +45,12 @@ public:
 
 private:
     std::vector<Node> node_c;
-    std::unordered_map<std::tuple<double, double, double>, size_t, tuple_hasher> node_coord;
+    std::unordered_map<std::tuple<double, double, double>, size_t, tuple_hasher> node_coords;
     std::vector<FiniteElement> tetra_c;
     std::vector<FiniteElement> triang_c;
 };
 
-std::vector<std::pair<size_t, size_t>> combinations(std::vector<size_t> nums);
+std::vector<std::pair<size_t, size_t>> combinations(std::vector<size_t>& nums);
 
 ///output of mesh
 inline std::ostream &operator<<(std::ostream &stream, AneuMeshLoader &mesh) {
@@ -59,33 +59,39 @@ inline std::ostream &operator<<(std::ostream &stream, AneuMeshLoader &mesh) {
     std::vector<FiniteElement> triang_c = mesh.get_triang();
     std::cout << "nodes:\n";
     std::cout << "\n-------------\n";
-    stream << node_c.size() << " " << node_c[0].coord.size() << "\n";
-    for (const auto &el: node_c) {
-        for (auto c: el.coord) {
-            stream << c << " ";
+    stream << node_c.size() << " " << node_c[0].coords.size() << "\n";
+    std::ranges::for_each(node_c,
+        [](const Node& el) -> void 
+        {std::ranges::copy(
+            el.coords, 
+            std::ostream_iterator<int>(std::cout, " "));
+        std::cout << "\n";
         }
-        stream << "\n";
-    }
+    );
+    std::cout << "\n";
     std::cout << "tetrahedral:\n";
     std::cout << "\n-------------\n";
     stream << tetra_c.size() << " " << tetra_c[0].nodes_id.size() << "\n";
-    for (const auto &el: tetra_c) {
-        stream << el.area_ID << " ";
-        for (auto c: el.nodes_id) {
-            stream << c << " ";
+    std::ranges::for_each(tetra_c,
+        [](const FiniteElement& el) -> void {
+        std::ranges::copy(
+            el.nodes_id,
+            std::ostream_iterator<int>(std::cout, " "));
+        std::cout << "\n";
         }
-        stream << "\n";
-    }
+    );
     std::cout << "triangles:\n";
     std::cout << "\n-------------\n";
     stream << triang_c.size() << " " << triang_c[0].nodes_id.size() << "\n";
-    for (const auto &el: triang_c) {
-        stream << el.area_ID << " ";
-        for (auto c: el.nodes_id) {
-            stream << c << " ";
+    std::ranges::for_each(triang_c,
+        [](const FiniteElement& el) -> void {
+            std::ranges::copy(
+                el.nodes_id,
+                std::ostream_iterator<int>(std::cout, " ")
+            );
+            std::cout << "\n";
         }
-        stream << "\n";
-    }
+    );
     return stream;
 }
 
